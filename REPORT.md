@@ -4,14 +4,14 @@
 
 | | |
 |---|---|
-| Họ và tên | `<điền>` |
-| MSSV (đúng bằng `LAB_STUDENT_ID` trong `.env`) | `<điền>` |
-| GitHub | `<điền: tên tài khoản>` |
-| Trip dùng cho bài tập sập và chạy lại (xem GUIDE, bước 5) | `<điền: trip-xxxxx>` |
+| Họ và tên | Thái Phúc Tiến |
+| MSSV (đúng bằng `LAB_STUDENT_ID` trong `.env`) | `2A202602873` |
+| GitHub | `tom-e666` |
+| Trip dùng cho bài tập sập và chạy lại (xem GUIDE, bước 5) | `` |
 
 ## Kết quả cuối
 
-- `dataset_version` của bạn: `<điền>`  (phải khớp `report/evidence/run_summary.json`)
+- `dataset_version` của bạn: `4470433b9f46c672b198e8d761246c36`  (phải khớp `report/evidence/run_summary.json`)
 - Số khung hình train / val / test của bạn: `<điền>`
 - `report/verify.txt`: tạo bằng `python3 scripts/check_submission.py --save-verify` (phải có `27/27 checks passed`).
 - Ảnh chụp trong `report/screenshots/`: `airflow_graph.png`, `minio_lake.png`, `metabase_dashboard.png`, và ảnh bài tập sập/chạy lại (log task đỏ thấy trip của bạn).
@@ -21,7 +21,10 @@
 ### Câu 1
 Liệt kê **ít nhất 4 khác biệt** giữa telemetry nguồn A và nguồn B mà bạn thấy ở bronze. Vì sao pipeline giữ **mỗi nguồn một bảng bronze** và để mọi cột ở dạng chữ, thay vì gộp và ép kiểu ngay?
 
-(trả lời ở đây)
+Một số khác biệt giữa nguồn a và nguồn b bao gồm định dạng thời gian (ts_utc và timestamp_ms), tốc độ (speed_mps và spd_kmh), hướng (heading_deg và hdg), các tên cột cũng có sự khác biệt về tọa độ(lat/lon và latitude/longtitude),
+senario(gas/brake/steer và throttle_pct/brake_pct/steering).
+
+Pipeline giữ mỗi nguồn trong một bảng Bronze để bảo toàn schema và nguồn gốc, tránh gộp nhầm các cột khác đơn vị hoặc ý nghĩa. Giữ dữ liệu dạng chữ giúp lưu nguyên giá trị đầu vào và trì hoãn ép kiểu đến Silver, nơi dữ liệu được chuẩn hóa và giá trị lỗi có thể được cách ly để kiểm tra.
 
 ## Bước 2 · Silver telemetry
 
