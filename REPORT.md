@@ -7,7 +7,7 @@
 | Họ và tên | Thái Phúc Tiến |
 | MSSV (đúng bằng `LAB_STUDENT_ID` trong `.env`) | `2A202602873` |
 | GitHub | `tom-e666` |
-| Trip dùng cho bài tập sập và chạy lại (xem GUIDE, bước 5) | `` |
+| Trip dùng cho bài tập sập và chạy lại (xem GUIDE, bước 5) | `trip-02134` |
 
 ## Kết quả cuối
 
@@ -87,21 +87,56 @@ Manifest ghi Bronze gồm `raw_telemetry_a` v0, `raw_telemetry_b` v0, `trips_raw
 ### Câu 9
 Mô tả chính xác điều xảy ra khi trip của bạn sập rồi chạy lại: bao nhiêu task chuyển đỏ, bao nhiêu task `upstream_failed`, bạn clear gì, dữ liệu có nhân đôi không, `dataset_version` có đổi không? Bằng chứng (ảnh, số) là gì?
 
-(trả lời ở đây)
+Trip tôi dùng là `trip-02134`. Lượt chạy lỗi làm task `silver_frames` của trip này chuyển đỏ; log có dòng `simulated crash while extracting trip-02134`. Bảy task phía sau (`dbt_run_silver`, `dbt_test_silver`, `dbt_run_gold`, `dbt_test_gold`, `publish_lake`, `export_dataset`, `publish_warehouse`) chuyển `upstream_failed`. Tôi chỉ clear task `silver_frames` bị lỗi. Sau khi chạy lại, DAG xanh toàn bộ, `verify` đạt 27/27 và `dataset_version` giữ nguyên là `044683dbe243`; dữ liệu không bị nhân đôi.
 
 ### Câu 10
 Nâng từ 2 drive lên **500 xe mỗi ngày**: ba thành phần nào của pipeline này sẽ vỡ đầu tiên, và bạn thay bằng gì (nối với slide 12, 22, 23)?
 
-(trả lời ở đây)
+Ở quy mô 500 xe/ngày, ba điểm nghẽn đầu tiên là:
+1. Trích frame video: hiện tại `silver_frames` trích tuần tự theo trip (`max_active_tis_per_dagrun=1`); cần chuyển phần trích frame sang nhóm worker phân tán (Ray/Celery/Spark worker) để xử lý song song trên nhiều node.
+2. Điều phối Airflow: hiện dùng `LocalExecutor` với tài nguyên giới hạn trên 1 máy; cần chuyển sang executor phân tán như `CeleryExecutor` hoặc `KubernetesExecutor` cùng hàng đợi và worker pool độc lập.
+3. Warehouse Postgres: Postgres là row-store sẽ quá tải khi nhận lượng lớn log mart và phục vụ truy vấn phân tích đồng thời; cần thay bằng columnar OLAP warehouse (ClickHouse hoặc Trino/DuckDB truy vấn trực tiếp trên Delta Lake).
 
 ## Câu hỏi riêng của bạn trên Metabase
 
 Câu SQL bạn thêm vào dashboard và điều nó cho biết:
 
-(trả lời ở đây)
+```sql
+SELECT split, frames, trips, drives
+FROM marts.mart_split_balance
+ORDER BY CASE split
+  WHEN 'train' THEN 1
+  WHEN 'val' THEN 2
+  WHEN 'test' THEN 3
+END;
+```
 
+Tôi dùng câu SQL này để xem số frame, trip và drive ở từng split. Kết quả ghi nhận: train có 710 frame và 18 trip, val có 142 frame và 4 trip, test có 167 frame và 4 trip; cả ba split đều nhận dữ liệu từ cả hai drive. Kết quả khẳng định dataset được phân chia cân bằng, gần sát tỷ lệ mục tiêu 70/14/16 và không bị rò rỉ trip giữa các tập.
+
+## Bonus — câu hỏi Metabase thứ hai
+
+Câu hỏi: Trip nào có tỷ lệ frame không vào Gold cao nhất?
+
+```sql
+SELECT
+    drive_id,
+    trip_id,
+    frames AS silver_frames,
+    frames_kept AS gold_frames,
+    frames - frames_kept AS frames_not_in_gold,
+    ROUND(100.0 * (frames - frames_kept) / NULLIF(frames, 0), 1) AS not_in_gold_pct,
+    split
+FROM marts.mart_trip_summary
+WHERE frames > 0
+ORDER BY not_in_gold_pct DESC, frames_not_in_gold DESC
+LIMIT 10;
+```
+
+Kết quả đầu bảng là `drive_a / trip-04622`: có 60 frame ở Silver, 26 frame vào Gold, tức 34 frame không vào Gold (56,7%). Trip này nên được ưu tiên kiểm tra chất lượng frame và đồng bộ trước khi dùng dữ liệu huấn luyện. Ảnh câu hỏi trên dashboard: `report/screenshots/metabase-toptrip.png`.
 ## Nhìn lại
 
 Điều bạn thấy bất ngờ nhất, điều gì còn chưa rõ, và một lỗi dữ liệu mà bạn nghĩ pipeline **chưa** bắt được (nếu có). Tối đa 8 dòng.
 
-(trả lời ở đây)
+- Bất ngờ nhất: Cơ chế Delta Lake overwrite theo predicate trip kết hợp content hashing giúp quy trình chạy lại (idempotency) hoàn toàn an toàn mà không làm nhân bản dữ liệu hay thay đổi hash version.
+- Điều chưa rõ: Cách tối ưu nén và dọn dẹp các tệp Parquet phân mảnh nhỏ (small file problem) khi số lượng trip phân vùng tăng lên hàng chục ngàn.
+- Lỗi chưa bắt được: Camera bị lệch góc (bị xoay roll/pitch/yaw do rung lắc xe) hoặc vật thể cản trở một phần ống kính (bụi bẩn bám cục bộ, cần gạt nước che khuất) — các trường hợp này không đủ làm tối/mờ toàn khung để kích hoạt ngưỡng dHash hay Laplacian.

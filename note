@@ -157,3 +157,157 @@ bằng chứng đã ghi: /opt/lab/report/evidence/threshold.json
 
 Admin@GF63ofTom MINGW64 /c/AI/vinai20k/K4-L3L4-Track4-DataPipeline4ComputerVision (main)
 $
+
+
+Admin@GF63ofTom MINGW64 /c/AI/vinai20k/K4-L3L4-Track4-DataPipeline4ComputerVision (main)
+$ MSYS_NO_PATHCONV=1 ./scripts/lab.sh step 4
+
+==============================================================================
+Bước 4 · GOLD: dataset huấn luyện, chia theo trip, có phiên bản
+==============================================================================
+  dbt run (gold): PASS=2 WARN=0 ERROR=0 SKIP=0
+  dbt test (gồm test chống rò rỉ split): PASS=7 WARN=0 ERROR=0 SKIP=0
+  {"dataset_version": "044683dbe243", "frames": 1019, "by_split": {"train": 710, "val": 142, "test": 167}, "trips_by_split": {"test": 4, "val": 4, "train": 18}}
+
+> Mỗi split có bao nhiêu khung hình và trip, ở từng drive
+drive_id  split  khung_hinh  trip  toc_do_tb_kmh
+--------  -----  ----------  ----  -------------
+drive_a   train  315         9     38.0
+drive_a   val    53          2     24.0
+drive_a   test   68          2     62.0
+drive_b   train  395         9     66.0
+drive_b   val    89          2     64.0
+drive_b   test   99          2     94.0
+
+MSSV dùng để chia split: 2A202602873
+CẦN THẤY: mỗi drive có đủ train, val, test; một trip chỉ nằm trong MỘT split; dataset_version là chuỗi 12 ký tự (đổi MSSV thì đổi version).
+
+--- Kiểm tra tự động của module 4 (verify --module 4) ---
+
+Module 4 · gold dataset
+  PASS  gold has frames in every split                                        1019 frames
+  PASS  no trip is in two splits (no leakage)                                 26 trips
+  PASS  every drive appears in train, val and test
+  PASS  gold contains no black / blurry / near-duplicate / out-of-sync frame    
+  PASS  one dataset_version, manifest.json agrees with the table              version 044683dbe243
+  PASS  manifest lists upstream table versions (lineage)
+  PASS  every manifest image exists under the dataset version folder
+
+7/7 checks passed
+{"ok": true}
+
+
+
+
+Admin@GF63ofTom MINGW64 /c/AI/vinai20k/K4-L3L4-Track4-DataPipeline4ComputerVision (main)
+$ MSYS_NO_PATHCONV=1 ./scripts/lab.sh cli export-dataset
+{"dataset_version": "044683dbe243", "frames": 1019, "by_split": {"train": 710, "val": 142, "test": 167}, "trips_by_split": {"test": 4, "val": 4, "train": 18}, "manifest_sha256": "b4f882c270274d49867b690c5f189d4dbe2c9354457d3b9607687fd08e9a851e"}
+
+
+
+
+
+Admin@GF63ofTom MINGW64 /c/AI/vinai20k/K4-L3L4-Track4-DataPipeline4ComputerVision (main)
+$ MSYS_NO_PATHCONV=1 ./scripts/lab.sh exp leakage
+THÍ NGHIỆM 3 · Chia theo khung hình có làm rò rỉ không?
+
+Khung hình đáng dùng: 1019, thuộc 26 trip
+Chia THEO KHUNG HÌNH (ngẫu nhiên 70/15/15): 26 trip nằm ở nhiều hơn một split, 26 trip có khung ở cả train lẫn test
+Chia THEO TRIP (gold của pipeline): 0 trip bị chia cắt
+
+Vì sao quan trọng: các khung liền nhau gần như giống hệt; nếu một nửa nằm ở train và nửa kia ở test, mô hình 'đã thấy' đề thi.
+
+bằng chứng đã ghi: /opt/lab/report/evidence/leakage.json
+{"ok": true}
+
+
+Admin@GF63ofTom MINGW64 /c/AI/vinai20k/K4-L3L4-Track4-DataPipeline4ComputerVision (main)
+$ MSYS_NO_PATHCONV=1 ./scripts/lab.sh step 5
+
+==============================================================================
+Bước 5 · WAREHOUSE: mart vào Postgres cho dashboard
+==============================================================================
+  dbt run (marts): PASS=7 WARN=0 ERROR=0 SKIP=0
+  {'mart_frame_funnel': 2, 'mart_frame_gallery': 1019, 'mart_speed_coverage': 7, 'mart_split_balance': 3, 'mart_telemetry_quality': 2, 'mart_trip_summary': 26} 
+
+CẦN THẤY: 6 mart trong Postgres (schema marts). Tiếp theo: chạy cả DAG trong Airflow (http://localhost:8080) và mở Metabase.
+
+--- Kiểm tra tự động của module 5 (verify --module 5) ---
+
+Module 5 · warehouse
+  PASS  warehouse has the six marts            {'mart_trip_summary': 26, 'mart_telemetry_quality': 2, 'mart_split_balance': 3, 'mart_speed_coverage': 7, 'mart_frame_gallery': 1019, 'mart_frame_funnel': 2}
+  PASS  warehouse gallery rows == gold frames
+
+2/2 checks passed
+{"ok": true}
+
+
+
+Admin@GF63ofTom MINGW64 /c/AI/vinai20k/K4-L3L4-Track4-DataPipeline4ComputerVision (main)
+$ MSYS_NO_PATHCONV=1 ./scripts/lab.sh verify
+
+Module 1 · bronze
+  PASS  bronze raw_telemetry rows == CSV rows (drive_a)                         
+ csv=3021
+  PASS  bronze raw_telemetry rows == CSV rows (drive_b)                         
+ csv=3234
+  PASS  bronze keeps each video once (sha256 unique)                            
+ 2 rows
+  PASS  bronze video sha256 matches the original file                           
+
+  PASS  bronze trips == 26                                                      
+
+
+Module 2 · silver telemetry
+  PASS  quarantine counts match raw CSV (drive_a)                               
+ expected={'duplicate': 20, 'speed_missing': 30, 'speed_out_of_range': 3} got={'duplicate': 20, 'speed_missing': 30, 'speed_out_of_range': 3}
+  PASS  clean + quarantined == received (drive_a)                               
+ 2968+53=3021
+  PASS  quarantine counts match raw CSV (drive_b)                               
+ expected={'duplicate': 20, 'speed_missing': 30, 'speed_out_of_range': 3} got={'duplicate': 20, 'speed_missing': 30, 'speed_out_of_range': 3}
+  PASS  clean + quarantined == received (drive_b)                               
+ 3181+53=3234
+  PASS  no duplicate (drive, ts) in silver telemetry                            
+
+  PASS  all speeds in 0..70 m/s                                                 
+
+  PASS  drive B clock offset removed (first sample within 0.5 s of video start)  2025-10-08 14:30:00.009000+00:00
+
+Module 3 · silver frames
+  PASS  frame_id unique                                                         
+ 1246 frames
+  PASS  black frames detected (drive_a)                                         
+ 6/6
+  PASS  black frames detected (drive_b)                                         
+ 4/4
+  PASS  blurry frames detected (drive_a)                                        
+ 8/8
+  PASS  frozen camera = near-duplicate frames (drive_a)                         
+ 11/12
+  PASS  low-light frames flagged but not black (drive_b)                        
+ 10/10
+
+Module 4 · gold dataset
+  PASS  gold has frames in every split                                          
+ 1019 frames
+  PASS  no trip is in two splits (no leakage)                                   
+ 26 trips
+  PASS  every drive appears in train, val and test                              
+
+  PASS  gold contains no black / blurry / near-duplicate / out-of-sync frame    
+
+  PASS  one dataset_version, manifest.json agrees with the table                
+ version 044683dbe243
+  PASS  manifest lists upstream table versions (lineage)                        
+
+  PASS  every manifest image exists under the dataset version folder            
+
+
+Module 5 · warehouse
+  PASS  warehouse has the six marts                                             
+ {'mart_trip_summary': 26, 'mart_telemetry_quality': 2, 'mart_split_balance': 3, 'mart_speed_coverage': 7, 'mart_frame_gallery': 1019, 'mart_frame_funnel': 2}  
+  PASS  warehouse gallery rows == gold frames                                   
+
+
+27/27 checks passed
+{"ok": true}
