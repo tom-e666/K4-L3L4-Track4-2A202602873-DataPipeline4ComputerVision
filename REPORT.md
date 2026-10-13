@@ -31,12 +31,21 @@ Pipeline giữ mỗi nguồn trong một bảng Bronze để bảo toàn schema 
 ### Câu 2
 Pipeline đưa hai nguồn về một schema như thế nào (đơn vị, kiểu thời gian, **độ lệch đồng hồ**)? Bằng chứng nào trong kết quả bước 2 cho thấy đã đúng? Dán bảng quarantine của bạn (số dòng theo từng lý do, từng drive) và giải thích vì sao dòng lỗi vào `rejects` thay vì bị xoá.
 
-(trả lời ở đây)
+A dùng ts_utc (UTC) và speed_mps (m/s); B đổi timestamp_ms sang UTC, spd_kmh sang m/s rồi trừ clock offset 1.500 ms. Metadata Bronze ghi offset A = 0 ms, B = 1.500 ms. Mẫu đầu `drive_b` sau chỉnh là `2025-10-08 14:30:00.009+00:00`; kiểm tra tự động xác nhận nó nằm trong 0,5 giây so với video start, nên offset đã được loại bỏ đúng.
+
+| Drive | Sạch | duplicate | speed_missing | speed_out_of_range |
+|---|---:|---:|---:|---:|
+| drive_a | 2.968 | 20 | 30 | 3 |
+| drive_b | 3.181 | 20 | 30 | 3 |
+
+Giữ dòng lỗi trong rejects cùng lý do, sử dụng _batch_id và _row_no để biết loại lỗi và truy lại dòng nguồn thay vì xóa mất dấu vết.
 
 ### Câu 3
 Vì sao test `max_gap_ms` là `warn` còn `in_range` là `error`? Kết quả thí nghiệm `break-gate` của bạn (`break_gate.json`): test nào bắt được, bao nhiêu dòng, và điều đó cho biết gì về vai trò của "cổng chất lượng"?
 
-(trả lời ở đây)
+max_gap_ms để cảnh báo vì khoảng trống cảm biến cần được theo dõi nhưng không nhất thiết làm dữ liệu sai; in_range để báo lỗi vì tốc độ ngoài 0–70 m/s không nên đi tiếp.
+Khi nới ngưỡng lên 1000 m/s, in_range bắt 6 dòng; kết quả là PASS=5 WARN=1 ERROR=1. Khôi phục ngưỡng gốc thì PASS=6 WARN=1 ERROR=0.
+Thí nghiệm cho thấy quality gate có thể báo vấn đề cần xem lại và chặn dữ liệu vượt quy tắc trước khi sang bước sau.
 
 ## Bước 3 · Silver frames
 
