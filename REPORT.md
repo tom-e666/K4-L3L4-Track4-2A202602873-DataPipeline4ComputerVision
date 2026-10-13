@@ -11,8 +11,8 @@
 
 ## Kết quả cuối
 
-- `dataset_version` của bạn: `4470433b9f46c672b198e8d761246c36`  (phải khớp `report/evidence/run_summary.json`)
-- Số khung hình train / val / test của bạn: `<điền>`
+- `dataset_version` của bạn: `044683dbe243`  (phải khớp `report/evidence/run_summary.json`)
+- Số khung hình train / val / test của bạn: `710 / 142 / 167`
 - `report/verify.txt`: tạo bằng `python3 scripts/check_submission.py --save-verify` (phải có `27/27 checks passed`).
 - Ảnh chụp trong `report/screenshots/`: `airflow_graph.png`, `minio_lake.png`, `metabase_dashboard.png`, và ảnh bài tập sập/chạy lại (log task đỏ thấy trip của bạn).
 
@@ -70,17 +70,17 @@ Khung đen có độ sáng dưới ngưỡng; khung tối chưa đen chỉ đư�
 ### Câu 6
 Dựa vào `leakage.json`: chia theo khung hình làm bao nhiêu trip bị chia cắt, so với chia theo trip? Vì sao điều này làm điểm kiểm thử đẹp một cách giả tạo?
 
-(trả lời ở đây)
+Chia ngẫu nhiên theo frame khiến 26/26 trip xuất hiện ở nhiều split; cả 26 trip đều có frame ở cả train và test. Chia theo trip trong Gold thì 0 trip bị chia cắt. Vì các frame gần nhau trong cùng trip thường giống nhau, đưa cùng một trip vào train và test có thể làm kết quả đánh giá cao hơn thực tế.
 
 ### Câu 7
 Vì sao `dataset_version` là **băm nội dung** chứ không phải ngày giờ hay số đếm? Hai lần chạy liên tiếp cho kết quả gì? Vì sao `dataset_version` của bạn **khác** bạn bè dù cùng dữ liệu (liên hệ MSSV)?
 
-(trả lời ở đây)
+Chạy step 4 rồi export lại đều cho version `044683dbe243` với 1.019 frame: train 710, val 142, test 167. Manifest có SHA256 `b4f882c270274d49867b690c5f189d4dbe2c9354457d3b9607687fd08e9a851e`. Version là băm nội dung nên cùng dữ liệu và MSSV cho cùng version; MSSV khác có thể làm cách chia trip đổi, kéo theo nội dung và version đổi.
 
 ### Câu 8
 Đọc phần `lineage` trong `manifest.json` của dataset bạn. Trả lời "dataset này được tạo từ dữ liệu nào?" bằng chính nội dung đó. Nếu một người hỏi 3 tháng sau, thông tin nào giúp tái tạo lại đúng dataset này?
 
-(trả lời ở đây)
+Manifest ghi Bronze gồm `raw_telemetry_a` v0, `raw_telemetry_b` v0, `trips_raw` v0, `video_files` v1; Silver gồm `frames` v53, `telemetry` v1, `frames_flagged` v1, `frame_telemetry` v1. SHA256 video nguồn: drive_a `636ba1a98dfc5ba665d1c935e1d2064e69f4df360ff9ffbd15795957d5e7e9aa`, drive_b `bfa62703f645ff77a8578ae3fc74a00881140d38a404d43c8e2af265bbee9fdc`. Manifest cũng ghi rule loại frame đen, mờ, gần trùng, mất đồng bộ và chia theo trip, phân tầng theo drive. Để dựng lại, cần đúng phiên bản bảng, video khớp SHA256, cùng rule, mã nguồn và MSSV.
 
 ## Bước 5 · Điều phối và phục vụ
 
